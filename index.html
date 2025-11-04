@@ -140,8 +140,7 @@
     </div>
 
     <script>
-        // Your original API key
-        const apiKey = 'f8f4160768dd0be1b96fcd82afa8737b';
+        // API key is REMOVED from the frontend. It will be handled by the serverless function.
         
         // DOM Elements
         const bodyEl = document.querySelector('body');
@@ -193,7 +192,7 @@
             }
         }
 
-        // Fetch cities for autocomplete
+        // Fetch cities for autocomplete from our serverless function
         async function searchCities() {
             const query = cityInput.value.trim();
             if (query.length < 3) {
@@ -202,8 +201,8 @@
             }
 
             try {
-                // Use the Geo API for city suggestions
-                const response = await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${query}&limit=5&appid=${apiKey}`);
+                // Use our own serverless function proxy
+                const response = await fetch(`/api/getWeather?geo=${encodeURIComponent(query)}`);
                 if (!response.ok) {
                     throw new Error('City search failed');
                 }
@@ -316,10 +315,18 @@
             loader.classList.add('hidden');
         }
 
-        function showError(message) {
+        async function showError(message) {
             hideLoader();
             hideSearchResults(); // Also hide search results on error
-            errorMessage.textContent = message;
+            
+            // Try to parse the error message if it's JSON
+            try {
+                const errorJson = JSON.parse(message);
+                errorMessage.textContent = errorJson.message || "An unknown error occurred.";
+            } catch(e) {
+                errorMessage.textContent = message;
+            }
+            
             errorDisplay.classList.remove('hidden');
             weatherContainer.classList.add('hidden');
             // Reset to default background on error
@@ -349,27 +356,21 @@
         }
 
 
-        // Fetch Weather from API
+        // Fetch Weather from our serverless function
         async function fetchWeather(city) {
             showLoader();
             try {
-                // Fetch current weather
-                const weatherResponse = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`);
-                if (!weatherResponse.ok) {
-                    throw new Error(`City not found (Error ${weatherResponse.status})`);
+                // Fetch from our own function endpoint
+                const response = await fetch(`/api/getWeather?city=${encodeURIComponent(city)}`);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || `City not found (Error ${response.status})`);
                 }
-                const weatherData = await weatherResponse.json();
-
-                // Fetch 5-day forecast
-                const forecastResponse = await fetch(`https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${apiKey}&units=metric`);
-                if (!forecastResponse.ok) {
-                    throw new Error(`Forecast not found (Error ${forecastResponse.status})`);
-                }
-                const forecastData = await forecastResponse.json();
+                const { weatherData, forecastData } = await response.json();
 
                 // Display data
                 displayCurrentWeather(weatherData);
-                displayHourlyForecast(forecastData); // Added this call
+                displayHourlyForecast(forecastData);
                 displayForecast(forecastData);
                 showWeather();
 
@@ -381,34 +382,27 @@
             }
         }
         
-        // Fetch Weather by Coords
+        // Fetch Weather by Coords from our serverless function
         async function fetchWeatherByCoords(lat, lon) {
             showLoader();
             try {
-                // Fetch current weather
-                const weatherResponse = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`);
-                if (!weatherResponse.ok) {
-                    throw new Error(`Weather not found for your location (Error ${weatherResponse.status})`);
+                // Fetch from our own function endpoint
+                const response = await fetch(`/api/getWeather?lat=${lat}&lon=${lon}`);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || `Weather not found (Error ${response.status})`);
                 }
-                const weatherData = await weatherResponse.json();
-
-                // Fetch 5-day forecast
-                const forecastResponse = await fetch(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`);
-                if (!forecastResponse.ok) {
-                    throw new Error(`Forecast not found for your location (Error ${forecastResponse.status})`);
-                }
-                const forecastData = await forecastResponse.json();
+                const { weatherData, forecastData } = await response.json();
 
                 // Display data
                 displayCurrentWeather(weatherData);
-                displayHourlyForecast(forecastData); // Added this call
+                displayHourlyForecast(forecastData);
                 displayForecast(forecastData);
                 showWeather();
 
                 // Save last city to localStorage
                 localStorage.setItem('lastWeatherCity', weatherData.name);
                 cityInput.value = weatherData.name;
-
 
             } catch (error) {
                 showError(error.message);
