@@ -2,7 +2,7 @@
 
 A sleek, responsive weather application built with pure HTML, Tailwind CSS, and JavaScript. This app uses a secure, serverless backend on Vercel to protect the OpenWeatherMap API key.
 
-![weather-app](./images/desktop.png)
+![weather-app](./images/horizon-weather-desktop.png)
 
 ## ✨ Features
 
