@@ -26,7 +26,7 @@ A sleek, responsive weather application built with pure HTML, Tailwind CSS, and 
 
 - **Secure API Calls**: Uses Vercel serverless functions to hide and protect the OpenWeatherMap API key, which is never exposed to the browser.
 
-🛠️ **Tech Stack**
+## 🛠️ Tech Stack
 
 **Frontend**: HTML, Tailwind CSS, Vanilla JavaScript
 
@@ -36,7 +36,7 @@ A sleek, responsive weather application built with pure HTML, Tailwind CSS, and 
 
 **Deployment**: Vercel
 
-🚀 **Deployment & Setup**
+## 🚀 Deployment & Setup
 
 This project is designed for a secure and straightforward deployment to Vercel.
 
@@ -78,7 +78,7 @@ After saving the environment variable, you must redeploy the project for the key
 
 Once the new deployment is complete, your app will be live and fully functional!
 
-📁 **File Structure**
+## 📁 File Structure
 
 The project is intentionally simple:
 
