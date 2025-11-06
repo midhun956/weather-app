@@ -1,68 +1,94 @@
-// This file goes in your repository at this exact path: /api/getWeather.js
-// It handles all calls to the OpenWeatherMap API.
+/**
+ * Vercel Serverless Function: /api/getWeather
+ *
+ * This function acts as a secure proxy for the OpenWeatherMap API.
+ * It handles three types of requests based on query parameters:
+ * 1. ?search=... : Calls the Geo API for city suggestions.
+ * 2. ?city=...   : Calls the Weather and Forecast APIs by city name.
+ * 3. ?lat=...&lon=... : Calls the Weather and Forecast APIs by coordinates.
+ *
+ * It securely accesses the API key from Vercel Environment Variables.
+ */
 
 export default async function handler(request, response) {
-    // Get the API key from Vercel's environment variables
+    // Get the API key securely from environment variables
     const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY;
 
+    // Check if the API key is set
     if (!OPENWEATHER_API_KEY) {
-        return response.status(500).json({ message: "OpenWeatherMap API key is not set" });
+        return response.status(500).json({ 
+            message: "OpenWeatherMap API key is not set" 
+        });
     }
 
-    const { city, lat, lon, geo } = request.query;
-    const units = 'metric';
+    const { search, city, lat, lon } = request.query;
 
     try {
-        // --- Handle Geo Search (for autocomplete) ---
-        if (geo) {
-            const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${geo}&limit=5&appid=${OPENWEATHER_API_KEY}`;
-            const geoResponse = await fetch(geoUrl);
+        // --- Re-added search functionality ---
+        if (search) {
+            // Use encodeURIComponent for the search query
+            const geoApiUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(search)}&limit=5&appid=${OPENWEATHER_API_KEY}`;
+            const geoResponse = await fetch(geoApiUrl);
+            
             if (!geoResponse.ok) {
                 const errorData = await geoResponse.json();
-                return response.status(geoResponse.status).json(errorData);
+                const statusCode = geoResponse.status;
+                // Forward the error from the Geo API
+                return response.status(statusCode).json({ message: errorData.message || 'Failed to fetch from OpenWeather Geo API' });
             }
-            const geoData = await geoResponse.json();
-            return response.status(200).json(geoData);
+            
+            const citySuggestions = await geoResponse.json();
+            // Return the suggestions directly
+            return response.status(200).json(citySuggestions);
         }
 
-        // --- Handle Weather/Forecast Search ---
-        let weatherUrl = '';
-        let forecastUrl = '';
+        // --- Main Weather Fetching ---
+        let weatherApiUrl = '';
+        let forecastApiUrl = '';
 
         if (city) {
-            weatherUrl = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${OPENWEATHER_API_KEY}&units=${units}`;
-            forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${OPENWEATHER_API_KEY}&units=${units}`;
+            // Use encodeURIComponent for the city name
+            weatherApiUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${OPENWEATHER_API_KEY}&units=metric`;
+            forecastApiUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(city)}&appid=${OPENWEATHER_API_KEY}&units=metric`;
         } else if (lat && lon) {
-            weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}&units=${units}`;
-            forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}&units=${units}`;
+            weatherApiUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}&units=metric`;
+            forecastApiUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}&units=metric`;
         } else {
-            return response.status(400).json({ message: "Missing city or lat/lon parameters" });
+            return response.status(400).json({ message: "Missing required query parameters (city or lat/lon)" });
         }
 
-        // Fetch both weather and forecast data in parallel
-        const [weatherRes, forecastRes] = await Promise.all([
-            fetch(weatherUrl),
-            fetch(forecastUrl)
+        // Use Promise.all to fetch both current weather and forecast simultaneously
+        const [weatherResponse, forecastResponse] = await Promise.all([
+            fetch(weatherApiUrl),
+            fetch(forecastApiUrl)
         ]);
 
-        // Check if either request failed
-        if (!weatherRes.ok) {
-            const errorData = await weatherRes.json();
-            return response.status(weatherRes.status).json(errorData);
-        }
-         if (!forecastRes.ok) {
-            const errorData = await forecastRes.json();
-            return response.status(forecastRes.status).json(errorData);
+        // Check for errors in the main weather response
+        if (!weatherResponse.ok) {
+            const errorData = await weatherResponse.json();
+            const statusCode = weatherResponse.status; // e.g., 404
+            const errorMessage = errorData.message || 'City not found';
+            // Send back the specific error message from OpenWeather
+            return response.status(statusCode).json({ message: errorMessage });
         }
 
-        const weatherData = await weatherRes.json();
-        const forecastData = await forecastRes.json();
+        // Check for errors in the forecast response (less critical, but good to check)
+        if (!forecastResponse.ok) {
+            const errorData = await forecastResponse.json();
+            // Log this error but maybe don't fail the whole request
+            console.error("Forecast fetch failed:", errorData.message);
+            // If the main weather call succeeded, we might still want to proceed
+            // For now, we'll fail if either fails.
+            return response.status(forecastResponse.status).json({ message: errorData.message || 'Failed to fetch forecast' });
+        }
 
-        // Return both payloads to the frontend
+        const weatherData = await weatherResponse.json();
+        const forecastData = await forecastResponse.json();
+
+        // Send both sets of data back to the client
         return response.status(200).json({ weatherData, forecastData });
 
     } catch (error) {
-        return response.status(500).json({ message: error.message });
+        return response.status(500).json({ message: error.message || 'An internal server error occurred' });
     }
 }
-
