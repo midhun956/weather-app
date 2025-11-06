@@ -1,4 +1,4 @@
-# 🌦️ Modern Weather App
+# 🌦️ Horizon Weather 
 
 A sleek, responsive weather application built with pure HTML, Tailwind CSS, and JavaScript. This app uses a secure, serverless backend on Vercel to protect the OpenWeatherMap API key.
 
