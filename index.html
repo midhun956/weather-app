@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Horizon Weather</title>
+    <!-- 
+      FAVICON LINK: This line adds the 🌥️ emoji to your browser tab
+    -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌥️</text></svg>">
     
     <!-- Load Tailwind CSS -->
@@ -53,7 +56,7 @@
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
-        /* Style for the new API-based icons */
+        /* Style for the API-based icons */
         .weather-icon-img {
             /* Adds a subtle drop shadow to make icons pop */
             filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.2));
@@ -71,18 +74,20 @@
 <!-- Added transition for smooth background changes -->
 <body class="bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 min-h-screen text-white p-4 sm:p-8 flex justify-center items-center transition-all duration-1000">
 
-    <!-- Main layout container -->
-    <div class="glass-card rounded-2xl shadow-2xl p-6 md:p-8">
+    <div class="w-full max-w-4xl mx-auto">
+        
+        <!-- Main Container -->
+        <div class="glass-card rounded-2xl shadow-2xl p-6 md:p-8">
             
             <!-- Header and Search (Responsive: flex-col on mobile, sm:flex-row on small screens and up) -->
             <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
-                <!-- Changed heading -->
                 <h1 class="text-3xl font-bold text-shadow">Horizon Weather</h1>
                 <!-- Search wrapper for positioning results -->
                 <div class="relative w-full sm:w-auto flex gap-2">
                     <div class="relative w-full sm:w-auto">
+                        <!-- Re-added live search input -->
                         <input type="text" id="cityInput" placeholder="Enter city name" class="w-full sm:w-64 bg-white/20 text-white placeholder-white/70 rounded-lg px-4 py-2 border-none focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-300" autocomplete="off">
-                        <!-- Search Results Dropdown -->
+                        <!-- Re-added Search Results Dropdown -->
                         <div id="searchResults" class="absolute top-full left-0 w-full rounded-b-lg overflow-hidden z-10 hidden mt-1 max-h-60 overflow-y-auto bg-black/70 backdrop-blur-md border border-white/20">
                             <!-- Results will be injected here by JS -->
                         </div>
@@ -140,12 +145,12 @@
     </div>
 
     <script>
-        // API key is REMOVED from the frontend. It will be handled by the serverless function.
+        // NOTE: The public API key is GONE.
         
         // DOM Elements
         const bodyEl = document.querySelector('body');
         const cityInput = document.getElementById('cityInput');
-        const searchResults = document.getElementById('searchResults');
+        const searchResults = document.getElementById('searchResults'); // Re-added
         const getWeatherBtn = document.getElementById('getWeather');
         const getLocationBtn = document.getElementById('getLocation');
         const loader = document.getElementById('loader');
@@ -171,7 +176,7 @@
             "default": "bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900"
         };
         
-        let debounceTimer;
+        let debounceTimer; // For search debouncing
 
         // Helper function to format time (for sunrise/sunset)
         function formatTime(timestamp) {
@@ -181,6 +186,8 @@
                 hour12: true
             });
         }
+
+        // --- Re-added Search Functionality ---
 
         // Debounce function
         function debounce(func, delay) {
@@ -192,7 +199,7 @@
             }
         }
 
-        // Fetch cities for autocomplete from our serverless function
+        // Fetch cities for autocomplete
         async function searchCities() {
             const query = cityInput.value.trim();
             if (query.length < 3) {
@@ -201,13 +208,13 @@
             }
 
             try {
-                // Use our own serverless function proxy
-                const response = await fetch(`/api/getWeather?geo=${encodeURIComponent(query)}`);
+                // Call our serverless function's search endpoint
+                const response = await fetch(`/api/getWeather?search=${encodeURIComponent(query)}`);
                 if (!response.ok) {
                     throw new Error('City search failed');
                 }
                 const cities = await response.json();
-                displaySearchResults(cities);
+                displaySearchResults(cities, query);
             } catch (error) {
                 console.error("Error searching cities:", error);
                 hideSearchResults();
@@ -215,20 +222,13 @@
         }
 
         // Display search results
-        function displaySearchResults(cities) {
+        function displaySearchResults(cities, query) {
             searchResults.innerHTML = '';
-            const query = cityInput.value.trim(); // Get current query
 
-            if (cities.length === 0 && query.length > 0) { // If no cities found, but user typed something
+            if (cities.length === 0 && query.length > 0) {
                 const resultItem = document.createElement('div');
-                resultItem.className = 'search-results-item p-3 cursor-pointer';
-                // Show a clickable item to search for their exact text
-                resultItem.innerHTML = `Search for "<strong>${query}</strong>"`; 
-                resultItem.addEventListener('click', () => {
-                    // We pass a simple object with the name property
-                    // to match what selectCity expects.
-                    selectCity({ name: query }); 
-                });
+                resultItem.className = 'search-results-item p-3 text-white/70';
+                resultItem.textContent = 'No cities found.';
                 searchResults.appendChild(resultItem);
             } else {
                 cities.forEach(city => {
@@ -242,6 +242,7 @@
                     }
                     resultItem.textContent = label;
                     resultItem.addEventListener('click', () => {
+                        // Pass the *entire* city object
                         selectCity(city);
                     });
                     searchResults.appendChild(resultItem);
@@ -252,9 +253,13 @@
 
         // Handle city selection from dropdown
         function selectCity(city) {
-            cityInput.value = city.name;
+            // city object contains { name, lat, lon, country, state }
+            cityInput.value = city.name; // Set the input text
             hideSearchResults();
-            fetchWeather(city.name);
+            
+            // --- THIS IS THE FIX ---
+            // Fetch weather using the reliable coordinates, not the name
+            fetchWeatherByCoords(city.lat, city.lon);
         }
 
         // Hide search results
@@ -263,12 +268,15 @@
             searchResults.innerHTML = '';
         }
 
+        // --- End of Search Functionality ---
+
+
         // Event Listeners
         getWeatherBtn.addEventListener('click', () => {
             const city = cityInput.value.trim();
             if (city) {
                 hideSearchResults();
-                fetchWeather(city);
+                fetchWeather(city); // Standard search by name when button is clicked
             } else {
                 showError("Please enter a city name.");
             }
@@ -280,7 +288,7 @@
             }
         });
 
-        // Add debounced live search to city input
+        // Re-add debounced live search to city input
         cityInput.addEventListener('input', debounce(searchCities, 300));
         
         // Hide results when clicking outside
@@ -316,7 +324,7 @@
         }
 
         async function showError(message) {
-            hideLoader();
+             hideLoader();
             hideSearchResults(); // Also hide search results on error
             
             // Try to parse the error message if it's JSON
@@ -324,7 +332,12 @@
                 const errorJson = JSON.parse(message);
                 errorMessage.textContent = errorJson.message || "An unknown error occurred.";
             } catch(e) {
-                errorMessage.textContent = message;
+                // If it's not JSON (like "Failed to fetch"), just show the text
+                if (message.includes("Failed to fetch")) {
+                    errorMessage.textContent = "Network error. Please check your connection.";
+                } else {
+                    errorMessage.textContent = message;
+                }
             }
             
             errorDisplay.classList.remove('hidden');
@@ -356,14 +369,15 @@
         }
 
 
-        // Fetch Weather from our serverless function
+        // Fetch Weather from API (by City Name)
         async function fetchWeather(city) {
             showLoader();
             try {
-                // Fetch from our own function endpoint
+                // Call our serverless function
                 const response = await fetch(`/api/getWeather?city=${encodeURIComponent(city)}`);
                 if (!response.ok) {
-                    const errorText = await response.text();
+                    // Get the error message from the serverless function's response
+                    const errorText = await response.text(); // Use text() first
                     throw new Error(errorText || `City not found (Error ${response.status})`);
                 }
                 const { weatherData, forecastData } = await response.json();
@@ -382,15 +396,15 @@
             }
         }
         
-        // Fetch Weather by Coords from our serverless function
+        // Fetch Weather by Coords
         async function fetchWeatherByCoords(lat, lon) {
             showLoader();
             try {
-                // Fetch from our own function endpoint
+                // Call our serverless function
                 const response = await fetch(`/api/getWeather?lat=${lat}&lon=${lon}`);
                 if (!response.ok) {
                     const errorText = await response.text();
-                    throw new Error(errorText || `Weather not found (Error ${response.status})`);
+                    throw new Error(errorText || `Weather not found for your location (Error ${response.status})`);
                 }
                 const { weatherData, forecastData } = await response.json();
 
@@ -400,7 +414,7 @@
                 displayForecast(forecastData);
                 showWeather();
 
-                // Save last city to localStorage
+                // Save last city to localStorage and update input field
                 localStorage.setItem('lastWeatherCity', weatherData.name);
                 cityInput.value = weatherData.name;
 
@@ -416,7 +430,11 @@
             const weatherMain = weather[0].main;
             const weatherDesc = weather[0].description;
             const iconCode = weather[0].icon;
-            const { sunrise, sunset } = sys; // Get sunrise/sunset times
+            // Handle cases where sys might be missing (e.g., bad API response)
+            const sunrise = sys ? sys.sunrise : 0;
+            const sunset = sys ? sys.sunset : 0;
+            const country = sys ? sys.country : '';
+
             
             const isDay = dt > sunrise && dt < sunset;
             updateBackground(weatherMain, isDay);
@@ -428,7 +446,7 @@
             });
 
             currentWeatherDiv.innerHTML = `
-                <h2 class="text-4xl font-bold mb-2 text-shadow">${name}, ${sys.country}</h2>
+                <h2 class="text-4xl font-bold mb-2 text-shadow">${name}, ${country}</h2>
                 <p class="text-lg text-white/80 mb-6 text-shadow">${currentDate}</p>
                 <!-- Responsive: flex-col on mobile, md:flex-row on medium screens up -->
                 <div class="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-12">
@@ -439,14 +457,13 @@
                             alt="${weatherDesc}" 
                             class="weather-icon-img w-24 h-24 md:w-32 md:h-32 -m-4 md:-m-6" 
                         />
-                        <div class_="${iconCode} ml-0 text-left">
-                            <p class="text-6xl font_bold text-shadow">${Math.round(main.temp)}°C</p>
+                        <div class="ml-0 text-left">
+                            <p class="text-6xl font-bold text-shadow">${Math.round(main.temp)}°C</p>
                             <p class="text-xl capitalize text-white/80 text-shadow">${weatherDesc}</p>
                         </div>
                     </div>
-                    
                     <!-- Responsive grid: 1 col on mobile, 3 on sm screens up -->
-                    <!-- This class provides the mobile UI fix -->
+                    <!-- This grid is fixed for mobile -->
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4 text-left text-lg">
                         <p class="text-white/80 flex items-center">
                             <!-- Feels like icon -->
@@ -470,17 +487,17 @@
                         <p class="text-white/80 flex items-center">
                             <!-- Wind icon -->
                             <svg class="w-6 h-6 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.126A59.768 59.768 0 0 1 21.485 12 59.77 59.77 0 0 1 3.27 20.875L6 12Zm0 0h7.5" /></svg>
-                             Wind: <span class="font-semibold text-white ml-1.5">${wind.speed} m/s</span>
+                            Wind: <span class="font-semibold text-white ml-1.5">${wind.speed} m/s</span>
                         </p>
                         <p class="text-white/80 flex items-center">
                             <!-- Sunrise icon -->
                             <svg class="w-6 h-6 inline-block mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0zM12 18.5A6.5 6.5 0 015.5 12H18.5A6.5 6.5 0 0112 18.5z" /></svg>
-                            Sunrise: <span class="font-semibold text-white ml-1.5">${formatTime(sunrise)}</span>
+                            Sunrise: <span class="font-semibold text-white ml-1.5">${sunrise ? formatTime(sunrise) : 'N/A'}</span>
                         </p>
                         <p class="text-white/80 flex items-center">
                             <!-- Sunset icon -->
                             <svg class="w-6 h-6 inline-block mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0zM12 18.5a6.5 6.5 0 006.5-6.5H5.5a6.5 6.5 0 006.5 6.5z" /></svg>
-                            Sunset: <span class="font-semibold text-white ml-1.5">${formatTime(sunset)}</span>
+                            Sunset: <span class="font-semibold text-white ml-1.5">${sunset ? formatTime(sunset) : 'N/A'}</span>
                         </p>
                     </div>
                 </div>
@@ -490,6 +507,12 @@
         // New Function: Display Hourly Forecast
         function displayHourlyForecast(data) {
             hourlyForecastContainer.innerHTML = '';
+
+            // Check if data.list exists
+            if (!data || !data.list) {
+                console.error("Hourly forecast data is missing or invalid");
+                return;
+            }
 
             // Get the next 8 entries (24 hours)
             const hourlyData = data.list.slice(0, 8);
@@ -524,6 +547,12 @@
         // Display 5-Day Forecast
         function displayForecast(data) {
             forecastContainer.innerHTML = '';
+
+            // Check if data.list exists
+            if (!data || !data.list) {
+                console.error("5-day forecast data is missing or invalid");
+                return;
+            }
             
             // Get forecast for the next 5 days (one entry per day, around midday)
             const dailyForecasts = data.list.filter(item => {
@@ -584,4 +613,3 @@
     </script>
 </body>
 </html>
-
